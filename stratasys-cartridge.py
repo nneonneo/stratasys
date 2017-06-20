@@ -57,7 +57,7 @@ class StratasysConsoleApp():
         # Information about a cartridge
         #
         info_parser = subparsers.add_parser("info", help="Print information about a cartridge")
-        info_parser.add_argument("-t", "--machine-type", action="store", choices=["fox", "fox2", "prodigy", "quantum", "uprint", "uprintse"], help="Machine type (Fox T-class, Prodigy P-class, Quantum)", required=True)
+        info_parser.add_argument("-t", "--machine-type", action="store", choices=["fox", "fox2", "prodigy", "quantum", "uprint", "uprintse", "guess"], help="Machine type (Fox T-class, Prodigy P-class, Quantum, uPrint, uPrint SE, guess from checksum)", default="guess")
         info_parser.add_argument("-e", "--eeprom-uid", action="store", dest="eeprom_uid", help="Format: [a-f0-9]{14}23, example: 11010a01ba325d23", required=True)
         info_parser.add_argument("-i", "--input-file", action="store", dest="input_file", required=True)
         info_parser.add_argument("-r", "--recreate-input-file", action="store_true", help="Print information on how to recreate the cartridge")
@@ -66,9 +66,9 @@ class StratasysConsoleApp():
         #
         # Refill an existing cartridge
         #
-        refill_parser = subparsers.add_parser("refill", help="Print information about a cartridge")
+        refill_parser = subparsers.add_parser("refill", help="Edit cartridge data")
         # Mandatory option
-        refill_parser.add_argument("-t", "--machine-type", action="store", choices=["fox", "fox2", "prodigy", "quantum", "uprint", "uprintse"], help="Machine type (Fox T-class, Prodigy P-class, Quantum)", required=True)
+        refill_parser.add_argument("-t", "--machine-type", action="store", choices=["fox", "fox2", "prodigy", "quantum", "uprint", "uprintse", "guess"], help="Machine type (Fox T-class, Prodigy P-class, Quantum, uPrint, uPrint SE, guess from checksum)", default="guess")
         refill_parser.add_argument("-e", "--eeprom-uid", action="store", dest="eeprom_uid", help="Format: [a-f0-9]{14}23, example: 11010a01ba325d23", required=True)
         refill_parser.add_argument("-i", "--input-file", action="store", type=str, dest="input_file", required=True)
         refill_parser.add_argument("-o", "--output-file", action="store", type=str, dest="output_file", required=True)
@@ -80,6 +80,24 @@ class StratasysConsoleApp():
         refill_parser.set_defaults(func=self.command_refill)
 
         return parser
+
+    def _guess_machine_type(self, cartridge_crypted, eeprom_uid):
+        m = manager.Manager(crypto.Desx_Crypto(), checksum.Crc16_Checksum())
+
+        for machine_type in machine.type_to_number:
+            machine_number = machine.get_number_from_type(machine_type)
+            try:
+                # make copy of cartridge_crypted each time because it gets mutated
+                cartridge = m.decode(machine_number, eeprom_uid, cartridge_crypted[:])
+            except Exception as e:
+                sys.stderr.write("Decode as %s failed: %s\n" % (machine_type, e))
+                pass
+            else:
+                sys.stderr.write("Machine type guessed as %s\n" % (machine_type,))
+                return machine_type
+        else:
+            # didn't find a matching machine type
+            raise ValueError("Tried to guess machine type but failed - cart data might be invalid.")
 
     def command_create(self, args):
         cart = cartridge.Cartridge(args.serial_number,
@@ -106,6 +124,16 @@ class StratasysConsoleApp():
         f = open(args.input_file, "rb")
         cartridge_crypted = bytearray(f.read())
         f.close()
+
+        # sanity check eeprom_uid
+        # note that some tools (e.g. eeProm-ds2433) report the uid in byte-reversed order.
+        if len(args.eeprom_uid) != 16:
+            sys.stderr.write("WARNING: eeprom_uid doesn't look correct: should be 16 hex bytes\n")
+        if not args.eeprom_uid.endswith('23'):
+            sys.stderr.write("WARNING: eeprom_uid doesn't look correct: it should end with 23 (family ID)\n")
+
+        if args.machine_type == 'guess':
+            args.machine_type = self._guess_machine_type(cartridge_crypted, args.eeprom_uid)
 
         machine_number = machine.get_number_from_type(args.machine_type)
 
@@ -149,6 +177,9 @@ class StratasysConsoleApp():
         f = open(args.input_file, "rb")
         cartridge_crypted = bytearray(f.read())
         f.close()
+
+        if args.machine_type == 'guess':
+            args.machine_type = self._guess_machine_type(cartridge_crypted, args.eeprom_uid)
 
         machine_number = machine.get_number_from_type(args.machine_type)
 
