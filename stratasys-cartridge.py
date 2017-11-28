@@ -127,6 +127,9 @@ class StratasysConsoleApp():
 
         # sanity check eeprom_uid
         # note that some tools (e.g. eeProm-ds2433) report the uid in byte-reversed order.
+        if args.eeprom_uid.startswith('23') and args.eeprom_uid.endswith('ff') and len(args.eeprom_uid) == 18:
+            args.eeprom_uid = ''.join(args.eeprom_uid[i:i+2] for i in reversed(range(0, 16, 2)))
+            sys.stderr.write("eeprom_uid appears to be eeprom-ds2433 format; will use reversed UID %s\n" % args.eeprom_uid)
         if len(args.eeprom_uid) != 16:
             sys.stderr.write("WARNING: eeprom_uid doesn't look correct: should be 16 hex bytes\n")
         if not args.eeprom_uid.endswith('23'):
