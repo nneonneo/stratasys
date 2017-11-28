@@ -179,6 +179,7 @@ class StratasysConsoleApp():
     def command_refill(self, args):
         f = open(args.input_file, "rb")
         cartridge_crypted = bytearray(f.read())
+        orig_data = cartridge_crypted[:]
         f.close()
 
         if args.machine_type == 'guess':
@@ -207,6 +208,8 @@ class StratasysConsoleApp():
                 c.signature)
 
         eeprom = m.encode(machine_number, args.eeprom_uid, new_c)
+        # pad new eeprom out to 512 bytes
+        eeprom += orig_data[len(eeprom):]
         f = open(args.output_file, "wb")
         f.write(eeprom)
         f.close()
