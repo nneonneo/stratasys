@@ -81,6 +81,19 @@ class StratasysConsoleApp():
 
         return parser
 
+    def _check_eeprom_uid(self, uid):
+        # sanity check eeprom_uid
+        # note that some tools (e.g. eeProm-ds2433) report the uid in byte-reversed order.
+        if uid.startswith('23') and uid.endswith('ff') and len(uid) == 18:
+            uid = ''.join(uid[i:i+2] for i in reversed(range(0, 16, 2)))
+            sys.stderr.write("eeprom_uid appears to be eeprom-ds2433 format; will use reversed UID %s\n" % uid)
+        if len(uid) != 16:
+            sys.stderr.write("WARNING: eeprom_uid doesn't look correct: should be 16 hex bytes\n")
+        if not uid.endswith('23'):
+            sys.stderr.write("WARNING: eeprom_uid doesn't look correct: it should end with 23 (family ID)\n")
+
+        return uid
+
     def _guess_machine_type(self, cartridge_crypted, eeprom_uid):
         m = manager.Manager(crypto.Desx_Crypto(), checksum.Crc16_Checksum())
 
@@ -111,6 +124,8 @@ class StratasysConsoleApp():
                 args.version,
                 args.signature)
 
+        args.eeprom_uid = self._check_eeprom_uid(args.eeprom_uid)
+
         machine_number = machine.get_number_from_type(args.machine_type)
 
         m = manager.Manager(crypto.Desx_Crypto(), checksum.Crc16_Checksum())
@@ -125,15 +140,7 @@ class StratasysConsoleApp():
         cartridge_crypted = bytearray(f.read())
         f.close()
 
-        # sanity check eeprom_uid
-        # note that some tools (e.g. eeProm-ds2433) report the uid in byte-reversed order.
-        if args.eeprom_uid.startswith('23') and args.eeprom_uid.endswith('ff') and len(args.eeprom_uid) == 18:
-            args.eeprom_uid = ''.join(args.eeprom_uid[i:i+2] for i in reversed(range(0, 16, 2)))
-            sys.stderr.write("eeprom_uid appears to be eeprom-ds2433 format; will use reversed UID %s\n" % args.eeprom_uid)
-        if len(args.eeprom_uid) != 16:
-            sys.stderr.write("WARNING: eeprom_uid doesn't look correct: should be 16 hex bytes\n")
-        if not args.eeprom_uid.endswith('23'):
-            sys.stderr.write("WARNING: eeprom_uid doesn't look correct: it should end with 23 (family ID)\n")
+        args.eeprom_uid = self._check_eeprom_uid(args.eeprom_uid)
 
         if args.machine_type == 'guess':
             args.machine_type = self._guess_machine_type(cartridge_crypted, args.eeprom_uid)
@@ -181,6 +188,8 @@ class StratasysConsoleApp():
         cartridge_crypted = bytearray(f.read())
         orig_data = cartridge_crypted[:]
         f.close()
+
+        args.eeprom_uid = self._check_eeprom_uid(args.eeprom_uid)
 
         if args.machine_type == 'guess':
             args.machine_type = self._guess_machine_type(cartridge_crypted, args.eeprom_uid)
